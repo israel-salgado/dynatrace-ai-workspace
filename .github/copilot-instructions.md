@@ -9,7 +9,7 @@ This workspace contains specialized skills and configurations for **production t
 ### Essential Configuration
 - **Default MCP Server:** `guu84124-mcp` (https://guu84124.apps.dynatrace.com)
 - **Fallback MCP Server:** `bon05374-mcp` (https://bon05374.sprint.apps.dynatracelabs.com)
-- **Skill Framework:** Dynatrace observability (12 skills installed)
+- **Skill Framework:** Dynatrace observability (13 skills installed)
 
 ### Common Tasks
 
@@ -138,7 +138,7 @@ Skills automatically load when needed. Key skills for common tasks:
 ### Query Structure
 ```dql
 fetch <data-object>, from: now()-<timeframe>, to: now()
-| filter <specific-entity-or-time-range>  # Filter EARLY to avoid 500GB scans
+| filter <specific-entity-or-time-range>
 | summarize <aggregation>, by: {<grouping>}
 ```
 
@@ -154,7 +154,7 @@ fetch <data-object>, from: now()-<timeframe>, to: now()
 ### Data Objects
 - `fetch spans` — Distributed tracing (span.*, service.*, http.*)
 - `fetch logs` — Log events (log.*, loglevel, content)
-- `fetch events` — Davis problems (event.*, dt.smartscape.*)
+- `fetch dt.davis.problems` — Davis problems (event.*, dt.smartscape.*)
 - `fetch bizevents` — Business events (custom fields)
 - `timeseries` — Metrics (NOT `fetch dt.metric`)
 
@@ -264,6 +264,5 @@ If query scans exceed 500GB without results:
 - Check MCP server status: Verify `mcp.json` configuration
 
 **For workspace setup:**
-- Load skill: `agent-customization` (saves coding preferences and instructions)
-- Run prompt: `@init` to bootstrap workspace customizations
+- See [README.md](../README.md) for setup instructions and skill reference
 
