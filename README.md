@@ -48,13 +48,19 @@ dynatrace-ai-workspace/
 
 ## Setup
 
+> **Dynatrace employees:** This workspace is pre-configured for the standard
+> Dynatrace demo environment (`guu84124.apps.dynatrace.com`). No changes are
+> required to run demos against the production demo tenant. Clone the repo,
+> reload VS Code, and authenticate via your Dynatrace SSO when prompted.
+
 ### 1. Clone the workspace
 
 ```bash
-git clone git@github.com:<your-username>/dynatrace-ai-workspace.git
+git clone git@github.com:virtualrussel/dynatrace-ai-workspace.git
 cd dynatrace-ai-workspace
-code .
 ```
+
+Then open the folder in VS Code via **File → Open Folder**.
 
 ### 2. Update skills to latest
 
@@ -65,44 +71,106 @@ npx skills add dynatrace-oss/dtctl
 
 > Run this command any time Dynatrace releases new skills.
 
-### 3. Configure your Dynatrace environment
+### 3. Configure your sprint environment (optional)
 
-Edit `.vscode/mcp.json` and replace the placeholder URLs with your environment:
+The workspace is pre-configured with two MCP servers — the shared demo tenant
+(`guu84124`) and a personal sprint tenant. The sprint entry is specific to the
+original author and **must be updated** if you want to use your own sprint environment.
+
+Complete all four steps below to fully configure your sprint tenant. Skipping
+any step will result in Copilot referencing a server that doesn't exist or
+authenticating against the wrong environment.
+
+#### Sprint Tenant Checklist
+
+**Step A — Update `.vscode/mcp.json`**
+
+Replace `<your-tenant-id>` with your personal sprint tenant ID (e.g. `abc12345`):
 
 ```json
 {
   "servers": {
-    "my-env-mcp": {
+    "guu84124-mcp": {
       "type": "stdio",
       "command": "npx",
       "args": ["-y", "@dynatrace-oss/dynatrace-mcp-server@latest", "--stdio"],
       "env": {
-        "DT_ENVIRONMENT": "https://<your-env>.apps.dynatrace.com"
+        "DT_ENVIRONMENT": "https://guu84124.apps.dynatrace.com"
+      }
+    },
+    "<your-tenant-id>-mcp": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@dynatrace-oss/dynatrace-mcp-server@latest", "--stdio"],
+      "env": {
+        "DT_ENVIRONMENT": "https://<your-tenant-id>.sprint.apps.dynatracelabs.com"
       }
     }
   }
 }
 ```
 
-### 4. Reload VS Code
+**Step B — Update `.github/copilot-instructions.md`**
 
-Press `Cmd+Shift+P` → `Developer: Reload Window`
+Find the MCP server section and update the fallback server name to match
+your tenant ID:
 
-Copilot will authenticate via browser SSO when you first use a prompt.
+```
+- **Default MCP Server:** guu84124-mcp
+- **Fallback MCP Server:** <your-tenant-id>-mcp
+```
 
-### 5. Install and authenticate dtctl
+Without this update, Copilot's auto-briefing will reference the original
+author's sprint server — which won't exist in your workspace.
+
+**Step C — Authenticate dtctl**
+
+```bash
+dtctl auth login --context <your-tenant-id> \
+  --environment "https://<your-tenant-id>.sprint.apps.dynatracelabs.com"
+```
+
+**Step D — Reload VS Code**
+
+Press `Cmd+Shift+P` → `Developer: Reload Window` to register the new MCP server.
+
+> If you only need the shared demo tenant (`guu84124`), skip this section entirely —
+> no sprint configuration is required for demos.
+
+### 4. Configure dtctl for the shared demo tenant (optional)
+
+`dtctl` is used for terminal-level verification and resource management. It is
+required for the `/daily-standup-notebook` prompt but optional for all other prompts.
 
 ```bash
 # macOS — direct install (no Homebrew required)
 curl -fsSL https://raw.githubusercontent.com/dynatrace-oss/dtctl/main/install.sh | bash
 
-# Authenticate against your environment
-dtctl auth login --context my-env \
-  --environment "https://<your-env>.apps.dynatrace.com"
+# Authenticate against the shared demo tenant
+dtctl auth login --context guu84124 \
+  --environment "https://guu84124.apps.dynatrace.com"
 
 # Verify
 dtctl doctor
 ```
+
+### 5. Reload VS Code
+
+Press `Cmd+Shift+P` → `Developer: Reload Window`
+
+When you first use a prompt in Copilot Chat, a browser window will open for
+Dynatrace SSO authentication. This is expected — complete the login and return
+to VS Code. Subsequent sessions authenticate automatically.
+
+### 6. Verify the connection
+
+In Copilot Chat, type:
+
+```
+Using the guu84124-mcp server, list the top 5 services by request volume in the last hour
+```
+
+If you see a table of services with request counts — you are live and ready to demo.
 
 ---
 
@@ -136,6 +204,7 @@ Prompts are pre-built investigation workflows available as Copilot slash command
 |---|---|
 | `/health-check` | Routine service health — performance, problems, deployments, vulnerabilities |
 | `/daily-standup` | Morning team report across multiple services with today vs yesterday comparison |
+| `/daily-standup-notebook` | Standup report + Dynatrace notebook creation + dtctl verification |
 | `/investigate-error` | "Something is wrong with this service" — error-focused investigation |
 | `/troubleshoot-problem` | Deep 7-step investigation into a specific Dynatrace problem |
 | `/incident-response` | Full production incident triage — all active problems, prioritized by business impact |
@@ -172,21 +241,22 @@ The Dynatrace MCP server gives Copilot live API access to your environment. When
 
 ## Optional: dtctl CLI
 
-[dtctl](https://github.com/dynatrace-oss/dtctl) is a kubectl-style CLI for Dynatrace that complements this workspace — giving you terminal-level access to run DQL queries, manage workflows, edit dashboards, and more.
+[dtctl](https://github.com/dynatrace-oss/dtctl) is a kubectl-style CLI for Dynatrace that complements this workspace — giving you terminal-level access to run DQL queries, manage workflows, verify notebooks, and more.
 
 ```bash
-# macOS (direct install)
+# macOS (direct install — no Homebrew required)
 curl -fsSL https://raw.githubusercontent.com/dynatrace-oss/dtctl/main/install.sh | bash
 
-# Authenticate
-dtctl auth login --context my-env \
-  --environment "https://<your-env>.apps.dynatrace.com"
+# Authenticate against the shared demo tenant
+dtctl auth login --context guu84124 \
+  --environment "https://guu84124.apps.dynatrace.com"
 
 # Verify
 dtctl doctor
 
 # Example commands
 dtctl get workflows
+dtctl get notebooks
 dtctl query 'fetch dt.davis.problems | filter event.status == "ACTIVE" | limit 5'
 ```
 
@@ -209,6 +279,7 @@ git push
 
 ## Related Resources
 
+- [ARCHITECTURE.md](./ARCHITECTURE.md) — How the workspace components connect
 - [dynatrace-for-ai](https://github.com/Dynatrace/dynatrace-for-ai) — Skills and prompts source repo
 - [dtctl](https://github.com/dynatrace-oss/dtctl) — Dynatrace CLI for humans and AI agents
 - [Dynatrace MCP Server](https://docs.dynatrace.com/docs/shortlink/dynatrace-mcp-server) — Official MCP server docs
