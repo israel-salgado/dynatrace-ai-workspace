@@ -13,5 +13,8 @@ node_modules/
 dtctl_tenant_reference_files/
 temp_dtctl_files/
 
+# Binaries
+dtctl.exe
+
 # Reference copies from official MCP server (do not commit third-party code)
 reference/official/
