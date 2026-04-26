@@ -89,6 +89,13 @@ if ($updated) {
 
 # Run validator on the registry
 Write-Host "`nRunning validator on registry..." -ForegroundColor Cyan
-& ..\scripts\validate-tenant-write.ps1 -Registry $RegistryPath
+$validatorPath = "..\scripts\validate-tenant-write.ps1"
+$validatorCommand = Get-Command $validatorPath -ErrorAction Stop
 
+if ($validatorCommand.Parameters.ContainsKey("Registry")) {
+    & $validatorPath -Registry $RegistryPath
+}
+else {
+    & $validatorPath
+}
 Write-Host "`nContext refresh complete. Review temp_dtctl_files/app-working-context.json" -ForegroundColor Cyan
