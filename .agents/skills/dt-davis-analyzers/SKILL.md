@@ -84,6 +84,6 @@ When adding analyzer results to notebooks:
 - `dt-dql-essentials/SKILL.md` (mandatory)
 - `dt-app-notebooks/SKILL.md`
 - `dt-obs-problems/SKILL.md`
-- MCP tool: `mcp_tdg63684-mcp_execute_davis_analyzer` + `list_davis_analyzers`
+- MCP tools: `execute_davis_analyzer` + `list_davis_analyzers`
 
 Load this skill when user mentions forecasting, anomaly detection, Davis analyzers, or advanced Davis AI analysis.
