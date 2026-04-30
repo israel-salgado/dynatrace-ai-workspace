@@ -11,7 +11,7 @@ This is the committed, single source of truth for agent behavior, workspace rule
 When starting a session or switching agents/tenants:
 1. Read the governing briefing file + this `CONVENTIONS.md` + `ARCHITECTURE.md`.
 2. **ALWAYS load `.agents/skills/dt-dql-essentials/SKILL.md` FIRST** (before any DQL).
-3. Review the relevant **per-app folder** (`temp_<type>_files/`) and its `current-<type>.json` + index first.
+3. Review the active tenant's folder under `temp_dtctl_files/tenant-memory/<TENANTID>/` first (`list_dir` it), then any per-type subfolder relevant to the task (`notebooks/`, `dashboards/`, `workflows/`, `settings/`).
 4. Establish tenant context using whichever path(s) the user has configured:
    - **dtctl path**: `dtctl config current-context` + `dtctl auth whoami --plain`.
    - **MCP path**: list configured MCP servers from `.vscode/mcp.json` / `.mcp.json`, and call `get_environment_info` / `find_entity_by_name` against the active one.
@@ -35,20 +35,57 @@ When in doubt:
 
 ## Workspace & Temp File Conventions
 - `temp_dtctl_files/` is **only** for tenant-specific experiments (ignored by `.gitignore`; **never** commit tenant names, IDs, or specific artifacts to root).
-- Use **per-app working context**: Organize by type (`temp_notebook_files/`, `temp_dashboard_files/`, `temp_workflow_files/`, etc.). Automatically create `temp_<newtype>_files/` (with current reference and index) when encountering a new resource type.
+- **Per-tenant folder layout (mandatory).** Inside `temp_dtctl_files/`, the `tenant-memory/` directory holds **both** the cross-tenant nickname registry **and** every per-tenant artifact folder (one folder per tenant ID):
+  ```
+  temp_dtctl_files/
+  ├── followup-items/                       # generic notes, no tenant data
+  └── tenant-memory/
+      ├── tenants.json                      # local nickname registry (cross-tenant; just IDs/URLs)
+      └── <TENANTID>/                       # one folder per tenant; everything tenant-scoped lives here
+          ├── notebooks/  dashboards/  workflows/  settings/
+          ├── snapshots/                    # before-user-edit snapshots
+          └── notes.md                      # tenant-specific notes
+  ```
+  Per-type subfolders (`notebooks/`, `dashboards/`, `workflows/`, `settings/`) inside each tenant folder replace the old flat `temp_<type>_files/` pattern. The agent must `list_dir` the active tenant's folder first and never touch another tenant's folder during the same operation. **Auto-create per-type subfolders on first use.** When the agent first creates or edits a resource of a type that doesn't yet have a subfolder for the active tenant (e.g. first workflow in `tenant-memory/guu84124/`), it creates `tenant-memory/<TENANTID>/<type>/` automatically. Same rule for `snapshots/` and `notes.md` — created on first need, never preemptively.
+
+- **File naming inside per-type subfolders.** One file per resource, named by its stable Dynatrace ID with a `.json` extension: `tenant-memory/<TENANTID>/notebooks/<NOTEBOOK-ID>.json`, `tenant-memory/<TENANTID>/dashboards/<DASHBOARD-ID>.json`, etc. For brand-new resources that don't have a tenant ID yet, use a slug (lowercase, hyphenated): `tenant-memory/<TENANTID>/notebooks/draft-<slug>.json`, then rename to the real ID after first apply. Snapshot files use `snapshots/<RESOURCE-TYPE>-<ID>-<timestamp>.json`. The legacy single-file `current-<type>.json` pattern is **no longer used** — every resource has its own file.
+- **Any file whose contents come from a tenant must live inside that tenant's folder.** This rule is broader than the per-resource contract above and covers everything else: schema dumps, query result CSVs, Davis CoPilot transcripts, entity ID lists, exported settings, raw API responses, scratch grep dumps, before/after diffs, anything else derived from a `dtctl` or MCP call. The mandatory landing zones are:
+  - **Structured resources with a Dynatrace ID** → `tenant-memory/<TENANTID>/<type>/<id>.json` (the per-resource contract).
+  - **Loose / unstructured / scratch tenant data** (text, csv, json without an ID, ad-hoc notes) → `tenant-memory/<TENANTID>/scratch/` (auto-create on first use). Use descriptive filenames like `settings-schemas-2026-04-30.txt`, `host-tags-export.csv`, `davis-conversation-host-rename.md`.
+  - **Tenant-specific narrative notes the agent wants to keep across turns** → `tenant-memory/<TENANTID>/notes.md`.
+  - **Tenant-agnostic followups** → `temp_dtctl_files/followup-items/`.
+  Before creating any file derived from tenant data, the agent picks one of the four landing zones above. If none fits, the agent asks the user before writing. **Never** create a tenant-derived file at the workspace root, in `scripts/`, in `.agents/`, in `docs/`, or anywhere else outside `temp_dtctl_files/`. This applies equally to terminal-redirected output (`> filename`) — the same rule that governs `create_file` governs shell redirection.
+- Every JSON artifact under `tenant-memory/<TENANTID>/` carries a top-level `_tenant: "<TENANTID>"` marker. `scripts/validate-tenant-write.ps1` rejects any apply where the active dtctl context, the parent tenant folder name, and the file's `_tenant` tag do not all match.
 - `reference/official/` holds extracted patterns from the official MCP server for analysis (do not commit tenant-specific code; use for skill enhancement only).
-- Agents **must** review the relevant per-app folder and `current-<type>.json` first using `list_dir` + `grep_search`.
 - After experiments, clean up or archive. Root source must remain fully generic/standardized for any user/GitHub.
 
+## Tenant Isolation (Absolute)
+- **Cross-tenant data movement is forbidden.** Each Dynatrace tenant is a sealed island. Never read data, IDs, names, queries, entity references, dashboards, notebooks, settings, or any artifact from one tenant and embed, transform, copy, apply, or even *reference* it in another tenant's context.
+- **Mandatory dual-context echo before any tenant write.** Before any `dtctl apply`, MCP `update_*`/`create_*`/`send_*`, or write to a Dynatrace resource, the agent must emit one block on its own line:
+  ```
+  Target tenant write → dtctl: <NICKNAME> · <TENANTID> · <class> · <safety>
+                         MCP : <SERVER-NICKNAME> · <TENANTID>   (or "none selected this turn")
+                         File: temp_dtctl_files/tenant-memory/<TENANTID>/<path>
+                         Status: OK ✓   (or STOP ✗ on any disagreement)
+  ```
+  If the dtctl context, the selected MCP server (when used), and the file's parent folder do not all point to the same `<TENANTID>`, **stop and ask** before writing.
+- **Session reset on tenant switch.** When the user switches dtctl context or selects a different MCP server in chat, the agent declares: *"Tenant changed → discarding in-memory references to entities, IDs, queries, and findings from the previous tenant."* No tenant-specific facts, names, IDs, or analyses carry forward into the new tenant context.
+- **Memory scoping.**
+  - `/memories/` (user) — workspace-agnostic preferences only. No tenant data.
+  - `/memories/repo/` — generic workspace patterns and lessons that hold true for **all** tenants. No tenant names, no tenant IDs, no tenant-specific entity references, no tenant-specific findings.
+  - `/memories/session/` — current conversation only; cleared at end of session. May reference the active tenant by name during the session, but must not be promoted to repo memory.
+  - Tenant-specific facts (entity names, IDs, known issues, owners, query patterns particular to one environment) live **only** in `temp_dtctl_files/tenant-memory/<TENANTID>/notes.md` (gitignored).
+- **Cross-tenant comparison requests.** If a user asks the agent to compare findings, copy a notebook, or transfer settings between tenants, the agent refuses and explains. Only the user can manually carry findings across; the agent does not.
+
 ## Live State Reconciliation & Conflict Protection (Mandatory)
-- Use per-app working context. When starting work on an app (or new type), refresh the `current-<type>.json` reference and per-folder index from the tenant (using stable ID).
-- Before any modification, `dtctl apply`, or MCP update on a **specific resource**: re-export **only that resource's** live state (`dtctl get <resource> <id> -o json`, using ID not name).
-- Run `scripts/validate-tenant-write.ps1` targeted at that single resource (it consults the per-app index for context).
+- Refresh per-resource state from the tenant when starting work (using stable ID): `dtctl get <type> <id> -o json` writes/overwrites `tenant-memory/<TENANTID>/<type>/<id>.json` (with `_tenant` tag added at the top). One file per resource; no shared `current-<type>.json`.
+- Before any modification, `dtctl apply`, or MCP update on a **specific resource**: re-export **only that resource's** live state (`dtctl get <type> <id> -o json`, using ID not name) and overwrite its per-resource file.
+- Run `scripts/validate-tenant-write.ps1` targeted at that single per-resource file. The validator enforces tenant isolation (active dtctl context = parent tenant folder = `_tenant` tag).
 - On detected user edits in the UI:
   - Provide a brief 1-2 sentence summary of what the user changed.
   - If edits are unrelated to the AI's pending changes → smart-merge user's edits into the local JSON, update the outgoing payload, and proceed.
   - Only stop and ask for explicit permission if the AI's changes would overwrite user edits. Offer options: stop, let AI overwrite, or do something else.
-- Always keep a timestamped "before-user-edit" snapshot in the per-app folder with notes for easy revert.
+- Always keep a timestamped "before-user-edit" snapshot at `tenant-memory/<TENANTID>/snapshots/<type>-<id>-<timestamp>.json` for easy revert.
 - Never silently overwrite user work. Report ownership/access constraints.
 
 ## File-System Boundaries (All Agents)
@@ -58,7 +95,7 @@ Agents (and any subagents they spawn) should treat the **workspace folder** (whe
 - **Default scope**: stay within the workspace root and its subfolders. This applies regardless of where the user installed it (e.g. `~/code/dt-mcp-server`, `C:\github\dt-mcp-server`, `/workspaces/dt-mcp-server`).
 - **Reads outside the workspace**: allowed when there is a clear, legitimate reason (e.g. inspecting a tool's own config, verifying credential storage, reading a referenced doc). Before doing so, **state the reason in plain language** so the user can decide whether to approve. The user has final discretion.
 - **Writes outside the workspace**: never silent. Always ask for explicit permission first and explain why. Default answer is no.
-- **Large or transient outputs**: prefer saving them inside the workspace under `temp_dtctl_files/` (or `temp_<type>_files/`). If something useful exists outside the workspace and you need it locally, copy it in rather than reading it in place repeatedly.
+- **Large or transient outputs**: prefer saving them inside the workspace under `temp_dtctl_files/tenant-memory/<TENANTID>/` (or `temp_dtctl_files/followup-items/` for tenant-agnostic notes). If something useful exists outside the workspace and you need it locally, copy it in rather than reading it in place repeatedly.
 - **Subagent prompts**: inherit this same rule. When delegating execution work, include a short note that file operations should stay inside the workspace unless the subagent has a clear reason to step outside, in which case it should report the reason back rather than act silently.
 
 The spirit of the rule: flexibility for reads when justified, strict guardrails on writes, and transparency about *why* whenever the agent needs to step outside the workspace.
@@ -113,7 +150,7 @@ MCP reaches a tenant via a named server entry in **both** `.vscode/mcp.json` and
 
 ### Both paths
 
-- Do **not** add tenant-specific IDs to root source files **other than** the two `mcp.json` files. Per-tenant artifacts go in `temp_dtctl_files/` (or another `temp_<type>_files/` folder).
+- Do **not** add tenant-specific IDs to root source files **other than** the two `mcp.json` files. Per-tenant artifacts go in `temp_dtctl_files/tenant-memory/<TENANTID>/`.
 - After a successful connect via either path, **offer to record a nickname** for the tenant in the Local Tenant Nickname Registry (next section). The same nickname works for both `"switch to <nickname>"` (dtctl) and *"use the `<nickname>` server"* (MCP) — that's the intended single-identity pattern.
 
 ## Local Tenant Nickname Registry

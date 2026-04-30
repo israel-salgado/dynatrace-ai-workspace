@@ -70,7 +70,7 @@ When adding analyzer results to notebooks:
 - Use JSON payload with full section metadata (`type: dql`, `showTitle`, `state.input.value`, `visualization`)
 - Re-export live notebook state first (`dtctl get notebook <id>`)
 - Verify `state.input.value` is non-empty after apply
-- Follow per-app reconciliation contract (temp folders, current reference)
+- Follow per-tenant reconciliation contract (write per-resource files under `temp_dtctl_files/tenant-memory/<TENANTID>/<type>/<id>.json`)
 
 ## Best Practices
 

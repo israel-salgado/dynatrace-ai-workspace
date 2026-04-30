@@ -77,7 +77,7 @@ ______________________________________________________________________
 
 ## Dashboard vs Notebook vs Standalone DQL (Agent-Agnostic Rule)
 
-**MANDATORY for ALL agents**: Load this skill **FIRST** before any DQL. Review all relevant workspace files first (`current-notebook.json`, `temp_dtctl_files/*`, `clean-dashboard.json`, skills, memories/repo/*). Use `temp_dtctl_files/` only for tenant-specific experiments (ignored on commit); keep root source generic/standardized for any user.
+**MANDATORY for ALL agents**: Load this skill **FIRST** before any DQL. Review all relevant workspace files first (the active tenant's folder under `temp_dtctl_files/tenant-memory/<TENANTID>/` and any per-type subfolder relevant to the task, skills, `memories/repo/*`). Use `temp_dtctl_files/` only for tenant-specific experiments — it is the agent's tenant workspace for both dtctl and MCP-fetched content (ignored on commit); keep root source generic/standardized for any user.
 
 - **Dashboard tiles**: Strictest parser. Avoid complex `summarize {..} by {..}`; use `fields`/`fieldsAdd bin()`/`sort`/`limit` + let visualization aggregate. Always validate by applying + refreshing UI. No time filters (UI timeframe handles it).
 - **Notebooks**: Prefer full JSON with `type: dql`, explicit `state.input.value/timeframe/querySettings/visualizationSettings`. Verify non-empty `state.input.value` post-`dtctl apply`. Use unique `event.type` + `event.provider` for workflow isolation to prevent data mixing.

@@ -33,7 +33,7 @@ For dtctl switches the agent always echoes a one-line confirmation (`Switching c
 **Mandatory agent initialization sequence** (review files first, then run/validate):
 1. Read this file + `copilot-instructions.md` + `CONVENTIONS.md` + `ARCHITECTURE.md`.
 2. **ALWAYS load `.agents/skills/dt-dql-essentials/SKILL.md` FIRST** (before any DQL).
-3. Review **all** relevant workspace files (`current-notebook.json`, `temp_dtctl_files/**`, `clean-dashboard.json`, skills).
+3. Review **all** relevant workspace files (the active tenant's folder under `temp_dtctl_files/tenant-memory/<TENANTID>/` and any per-type subfolder relevant to the task, skills).
 4. For tenant context, use whichever path(s) the user has configured — do not assume dtctl is present:
    - **dtctl path**: `dtctl config current-context` + `dtctl auth whoami --plain`.
    - **MCP path**: list configured MCP servers from `.vscode/mcp.json` / `.mcp.json`, and call `get_environment_info` / `find_entity_by_name` against the active one.
@@ -74,7 +74,19 @@ These rules apply every turn, regardless of topic. Topic-specific rules (DQL syn
 - **Always start with problems — never broad log searches.** See `## Global Rule` below for full text.
 - **Load `.agents/skills/dt-dql-essentials/SKILL.md` before any DQL.** Including dashboards and notebooks. Non-negotiable.
 - **Run `scripts/validate-tenant-write.ps1` before any tenant write.** Targeted at the single resource being modified.
-- **Keep root source files generic.** No tenant-specific names or IDs in root source files. Tenant artifacts live only in `temp_<type>_files/`.
+- **Keep root source files generic.** No tenant-specific names or IDs in root source files. Tenant artifacts live only in `temp_dtctl_files/tenant-memory/<TENANTID>/` (one folder per tenant, gitignored).
+- **Any file whose contents come from a tenant lives in that tenant's folder.** Rule applies to every output derived from a `dtctl`/MCP call — schema dumps, query results, Davis transcripts, entity lists, scratch grep output, anything. Landing zones: structured resources with an ID → `tenant-memory/<TENANTID>/<type>/<id>.json`; loose/scratch tenant data → `tenant-memory/<TENANTID>/scratch/` (auto-create); tenant notes → `tenant-memory/<TENANTID>/notes.md`; tenant-agnostic followups → `temp_dtctl_files/followup-items/`. Same rule governs terminal redirects (`> filename`). Never write tenant-derived data to repo root, `scripts/`, `.agents/`, `docs/`, or any other source folder. If unsure which zone fits, ask before writing.
+- **Tenant isolation is absolute (cross-tenant data movement is forbidden).** Each Dynatrace tenant is a sealed island. Never read data, IDs, names, queries, entity references, dashboards, notebooks, settings, or any artifact from one tenant and embed, transform, copy, apply, or even *reference* it in another tenant's context. The agent treats each tenant as if it knows nothing about any other tenant. If the user asks for cross-tenant comparison, refuse and explain — only the user can manually carry findings across. Per-tenant artifacts live exclusively under `temp_dtctl_files/tenant-memory/<TENANTID>/` and never leave that folder.
+- **Mandatory dual-context echo before any tenant write.** Before any `dtctl apply`, MCP `update_*`/`create_*`/`send_*`, or write to a Dynatrace resource, emit one block on its own line and verify all three agree:
+  ```
+  Target tenant write → dtctl: <NICKNAME> · <TENANTID> · <class> · <safety>
+                         MCP : <SERVER-NICKNAME> · <TENANTID>   (or "none selected this turn")
+                         File: temp_dtctl_files/tenant-memory/<TENANTID>/<path>
+                         Status: OK ✓   (or STOP ✗ on any disagreement)
+  ```
+  If `dtctl` context, selected MCP server, and file folder do not all point to the same `<TENANTID>` (or one path is unused), **stop and ask** before writing. Files outside `temp_dtctl_files/tenant-memory/<TENANTID>/` may not be applied to a tenant.
+- **Session reset on tenant switch.** When the user switches dtctl context or selects a different MCP server, immediately declare: *"Tenant changed → discarding in-memory references to entities, IDs, queries, and findings from the previous tenant."* Do not carry forward any tenant-specific facts, names, IDs, or analysis from the prior tenant into the new one.
+- **Repo memory stays generic.** `/memories/repo/` may only contain workspace-wide patterns and lessons that are true for all tenants. Tenant-specific facts (entity names, IDs, known issues, owners) go only in `temp_dtctl_files/tenant-memory/<TENANTID>/notes.md` (gitignored).
 
 ## Global Rule
 
@@ -102,20 +114,22 @@ Type `/` in Copilot Chat to access these slash commands:
 
 ## Notebook (and App) Update Contract
 
-This workspace follows a per-app smart reconciliation contract (full details in `CONVENTIONS.md`):
+This workspace follows a per-tenant per-resource smart reconciliation contract (full details in `CONVENTIONS.md`):
 
-- Use per-app folders (`temp_<type>_files/`) with `current-<type>.json` and index. Auto-create for new types (e.g. business_flow).
-- Target **only the specific app** being modified. Refresh current reference when starting work on a type.
-- On user UI edits: give 1-2 sentence summary. Smart-merge unrelated changes into local JSON. Stop and ask (with options: stop/let AI overwrite/do something else) only on conflicting overwrites.
-- Keep timestamped before-user-edit snapshot for revert.
+- One file per resource at `temp_dtctl_files/tenant-memory/<TENANTID>/<type>/<id>.json` with a top-level `_tenant` marker. Per-type subfolders (`notebooks/`, `dashboards/`, `workflows/`, `settings/`, …) and `snapshots/` are auto-created on first use. The retired `temp_<type>_files/` + `current-<type>.json` pattern is no longer used.
+- Target **only the specific resource** being modified. Refresh that single resource from the tenant before edit (`dtctl get <type> <id> -o json` written to its file).
+- On user UI edits: give 1-2 sentence summary. Smart-merge unrelated changes into the local JSON. Stop and ask (stop / let AI overwrite / do something else) only on conflicting overwrites.
+- Keep a timestamped before-user-edit snapshot at `tenant-memory/<TENANTID>/snapshots/<type>-<id>-<timestamp>.json` for revert.
 - Prefer JSON payloads, ID-based operations, explicit DQL metadata, re-export + verify after apply.
 
-**File-System Boundaries**: Default scope for all file operations is the **workspace folder** (wherever the user installed it). Reads outside the workspace are allowed when there is a clear, legitimate reason — but the agent must state the reason in plain language first so the user can approve or deny. Writes outside the workspace always require explicit user permission and a stated reason. When in doubt, copy needed material into `temp_dtctl_files/` and work locally. Subagents inherit this rule. Full details in `CONVENTIONS.md` → *File-System Boundaries*.
+**File-System Boundaries**: Default scope for all file operations is the **workspace folder** (wherever the user installed it). Reads outside the workspace are allowed when there is a clear, legitimate reason — but the agent must state the reason in plain language first so the user can approve or deny. Writes outside the workspace always require explicit user permission and a stated reason. When in doubt, copy needed material into the active tenant's folder under `temp_dtctl_files/tenant-memory/<TENANTID>/` and work locally. Subagents inherit this rule. Full details in `CONVENTIONS.md` → *File-System Boundaries*.
+
+**`temp_dtctl_files/` scope (agent-neutral).** Despite the name, this folder is the agent's tenant workspace for **all** tenant-bound artifacts regardless of which tool fetched them — `dtctl get`, MCP `execute_dql` results saved to disk, MCP-driven notebook/dashboard exports, etc. The folder name is historical; the rule is universal.
 
 **Agent-Agnostic DQL Rules** (apply to ALL agents — see also copilot-instructions.md):
-- **ALWAYS load dt-dql-essentials/SKILL.md FIRST**. Review the relevant per-app folder and current reference first.
+- **ALWAYS load dt-dql-essentials/SKILL.md FIRST**. Review the active tenant's folder under `temp_dtctl_files/tenant-memory/<TENANTID>/` and the relevant per-type subfolder first.
 - Unique `event.type` + provider for isolation. Validate in exact context (dashboard tiles require `fields`/`bin()`/`sort`/`limit` fallback).
-- Prefer JSON, start with problems, record generic lessons only. Ensures identical safe behavior. Root remains standardized; per-app temp folders hold context.
+- Prefer JSON, start with problems, record generic lessons only. Ensures identical safe behavior. Root remains standardized; per-tenant folders hold context.
 
 Failure mode reminders:
 - Duplicate names can point to different ownership.
