@@ -11,16 +11,20 @@ This file (and its counterpart) defines **exactly** how any agent interacts with
 
 **Baseline tenant.** `guu84124` (production, public URL `demo.live.dynatrace.com`) is the only tenant ID referenced in this repo's source files — it is publicly reachable and safe to demo. The local nickname registry may seed it as `demo.live` (matching the public URL), but this is purely a convenience; the user may rename it or skip it entirely.
 
-**Session start.** The agent runs `dtctl config current-context` and reports the active context in one line (e.g. `Active dtctl context: <NICKNAME> · <TENANTID> · <class> · <safety>`). dtctl's active context is **persistent on disk** — it carries over between VS Code sessions — so the agent does **not** auto-switch. There is no "default tenant."
+**Session start.** The agent reports the active tenant context in one line, using whichever path(s) are configured (resolving via the local nickname registry where possible). Neither path is required — use whichever is present:
+- **dtctl configured** → run `dtctl config current-context` and emit `Active dtctl context: <NICKNAME> · <TENANTID> · <class> · <safety>`. dtctl's active context is **persistent on disk** (carries over between VS Code sessions), so the agent does **not** auto-switch.
+- **MCP configured** → list the configured MCP server(s) from `.vscode/mcp.json` / `.mcp.json` and emit `Active MCP server: <NICKNAME> · <TENANTID>` (one line per server if multiple).
+- **Both configured** → emit one line for each. There is no "default tenant."
 
-**Switch context** (preferred → nickname; fallback → raw tenant ID):
+**Switch context** (preferred → nickname; fallback → raw tenant ID). The same nickname resolves both paths — single identity, two routes:
 ```
-"switch to <NICKNAME>"        # resolved via temp_dtctl_files/tenant-memory/tenants.json
-"switch to <TENANTID>"        # raw 8-char ID always works
+"switch to <NICKNAME>"             # dtctl: dtctl config use-context <id>
+"use the <NICKNAME> server, …"      # MCP: select that server entry in chat
+"switch to <TENANTID>"             # raw 8-char ID always works for dtctl
 ```
-The agent always echoes a one-line confirmation (`Switching context → <NICKNAME> · <TENANTID> · <class> · <safety>`) before running `dtctl config use-context`. Ambiguous or fuzzy names are never auto-resolved.
+For dtctl switches the agent always echoes a one-line confirmation (`Switching context → <NICKNAME> · <TENANTID> · <class> · <safety>`) before running `dtctl config use-context`. For MCP-only sessions no `use-context` exists — the user picks the server by name in chat. Ambiguous or fuzzy names are never auto-resolved on either path.
 
-**Connecting to a brand-new tenant via dtctl** (no `.mcp.json` tenant routing required for dtctl-only access): see `CONVENTIONS.md` → *Connecting to a New Tenant* for the full procedure (prompt user for URL + safety level, run `dtctl auth login`, verify). Quick reference also in `CHEATSHEET.md` → *Session Management*.
+**Connecting to a brand-new tenant.** Two independent procedures — dtctl (Path A) and MCP server entry (Path B). The user may want one, the other, or both. See `CONVENTIONS.md` → *Connecting to a New Tenant* for the full dual procedure (Path A: prompt for URL + safety level, run `dtctl auth login`, verify; Path B: add a parallel server entry to both `.vscode/mcp.json` and `.mcp.json`, reload MCP, verify with `get_environment_info`). Quick reference also in `CHEATSHEET.md` → *Session Management*.
 
 **Local tenant nickname registry**: when the user says *"switch to <NICKNAME>"* using a short name, resolve it via `temp_dtctl_files/tenant-memory/tenants.json` per `CONVENTIONS.md` → *Local Tenant Nickname Registry*. Never auto-resolve ambiguous or fuzzy matches — always ask. The registry is local-only and never committed.
 
@@ -30,8 +34,10 @@ The agent always echoes a one-line confirmation (`Switching context → <NICKNAM
 1. Read this file + `copilot-instructions.md` + `CONVENTIONS.md` + `ARCHITECTURE.md`.
 2. **ALWAYS load `.agents/skills/dt-dql-essentials/SKILL.md` FIRST** (before any DQL).
 3. Review **all** relevant workspace files (`current-notebook.json`, `temp_dtctl_files/**`, `clean-dashboard.json`, skills).
-4. For dtctl/MCP tenant context: Run `dtctl config current-context`, `dtctl auth whoami --plain`, and/or MCP `get_environment_info` / `find_entity_by_name`.
-5. Follow the Global Rule and rules in `CONVENTIONS.md` strictly. No tenant-specific names/IDs in root source files.
+4. For tenant context, use whichever path(s) the user has configured — do not assume dtctl is present:
+   - **dtctl path**: `dtctl config current-context` + `dtctl auth whoami --plain`.
+   - **MCP path**: list configured MCP servers from `.vscode/mcp.json` / `.mcp.json`, and call `get_environment_info` / `find_entity_by_name` against the active one.
+5. Apply the *Tool Selection* rubric below when picking between MCP and dtctl for a given task. Follow the Global Rule and rules in `CONVENTIONS.md` strictly. No tenant-specific names/IDs in root source files.
 
 See `CONVENTIONS.md` for full Workspace & Temp File Conventions, Live State Reconciliation & Conflict Protection, DQL rules, and Sync Checklist.
 
@@ -45,13 +51,23 @@ See `CONVENTIONS.md` for full details on Workspace & Temp File Conventions, Live
 |---|---|
 | **Baseline tenant routing** | `demo.live` → https://guu84124.apps.dynatrace.com (public, only tenant ID in repo source) |
 
-This workspace runs one local MCP server launched from `.mcp.json`; entries there are **tenant routings** of that one server, not additional servers. Add more tenants per machine via `dtctl auth login` (and optionally a matching tenant routing in `.mcp.json`). See `CONVENTIONS.md` → *Connecting to a New Tenant* and *Local Tenant Nickname Registry*.
+This workspace is an MCP repo at heart — it configures and ships skills/prompts/conventions on top of the Dynatrace MCP server (one local server launched from `.mcp.json` and `.vscode/mcp.json`; entries there are tenant routings of that one server). It is also configured **assuming the user has `dtctl` installed alongside MCP** so the agent can use the best of both. `dtctl` is a separate project in a separate repo (`github.com/dynatrace-oss/dtctl`) — nothing in this repo builds or vendors it. Add more tenants per machine via either path (or both): MCP server entry in `mcp.json` files, and/or `dtctl auth login`. See `CONVENTIONS.md` → *Connecting to a New Tenant* (Path A and Path B) and *Local Tenant Nickname Registry*.
+
+## Tool Selection (MCP vs dtctl)
+
+Both paths can do most read/query/edit work. The full capability matrix lives in [README.md](README.md#two-paths-to-dynatrace) → *Two paths to Dynatrace*; the canonical rubric lives in `CONVENTIONS.md` → *Tool Selection*. Quick decision guide:
+
+- **Prefer MCP** for: Davis CoPilot chat, Davis Analyzers, ad-hoc Slack/email from chat, ingesting custom events (`send_event`), resetting Grail budget, NL→DQL helpers, structured-JSON-direct-to-the-AI tasks.
+- **Prefer `dtctl`** for: declarative `apply`/`diff`/`history`/`restore`, `share`/`unshare`, persistent multi-context with safety levels, custom output formats (yaml/csv/toon/wide), `dtctl skills install`, anything the user wants to **see** in the terminal.
+- **Either works** for: DQL queries, reading entities (services/hosts/problems/vulnerabilities/Kubernetes/RUM), creating/editing notebooks, dashboards, workflows, settings.
+
+When in doubt: continuity (use what the user just used) → configured-only path → ask once if both are configured.
 
 ## Always-On Behaviors
 
 These rules apply every turn, regardless of topic. Topic-specific rules (DQL syntax, notebook structure, etc.) live in their respective sections below.
 
-- **Echo every dtctl context switch.** One-line confirmation (`Switching context → <NICKNAME> · <TENANTID> · <class> · <safety>`) before running `dtctl config use-context`. Never auto-resolve ambiguous or fuzzy tenant nicknames — always ask.
+- **Echo every tenant context switch.** For dtctl switches: one-line confirmation (`Switching context → <NICKNAME> · <TENANTID> · <class> · <safety>`) before running `dtctl config use-context`. For MCP server selection in chat: echo `Using MCP server → <NICKNAME> · <TENANTID>` once before the first call. Never auto-resolve ambiguous or fuzzy nicknames — always ask.
 - **Clickable options for short choices.** Use `vscode_askQuestions` for any 2–6-option fork-in-the-road; leave freeform input on. Use plain text for explanations and multi-paragraph recommendations.
 - **File-system boundaries.** Default scope is the workspace folder. Reads outside the workspace require a stated plain-language reason first; writes outside the workspace require explicit user permission. Subagents inherit this rule. Full details in `CONVENTIONS.md` → *File-System Boundaries*.
 - **Live-state reconciliation before any modification.** Before any `dtctl apply`, MCP update, or write to a Dynatrace resource (notebook, dashboard, workflow, settings), re-export that resource's live state by ID first. Smart-merge unrelated user UI edits; stop and ask only on conflicting overwrites (options: stop / let AI overwrite / do something else). Keep a timestamped before-user-edit snapshot for revert.
