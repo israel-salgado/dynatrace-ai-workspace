@@ -154,7 +154,7 @@ MCP reaches a tenant via a named server entry in **both** `.vscode/mcp.json` and
 
 - Do **not** add tenant-specific IDs/URLs to any repo-tracked source files (markdown, scripts, settings, configs). Per-tenant artifacts go in `temp_dtctl_files/tenant-memory/<TENANTID>/`.
 - If the user chooses MCP Path B, the MCP config files may contain tenant URLs **locally**, but those changes must be kept out of commits (verify with `git status` before any push/PR).
-- After a successful connect via either path, **offer to record a nickname** for the tenant in the Local Tenant Nickname Registry (next section). The same nickname works for both `"switch to <nickname>"` (dtctl) and *"use the `<nickname>` server"* (MCP) — that's the intended single-identity pattern.
+- After a successful connect via either path, **offer to record a nickname** for the tenant in the Local Tenant Nickname Registry (next section). The same nickname works for both paths — a bare `"switch to <nickname>"` from the user implies **both** dtctl and MCP routing through that nickname (see *Switch verb — dual-path semantics* in the next section).
 
 ## Local Tenant Nickname Registry
 
@@ -220,6 +220,20 @@ Validation before writing:
 Switching context → <NICKNAME> · <TENANTID> · <class> · <safety>
 Proceed?
 ```
+
+### Switch verb — dual-path semantics
+A bare `"switch to <nickname>"` (or `"switch to <tenantid>"`) from the user means **both paths**: dtctl and MCP. The agent attempts each path independently and reports which succeeded.
+
+| User says | dtctl action | MCP action |
+|---|---|---|
+| `switch to <nickname>` | resolve nickname, then `dtctl config use-context <id>`, echo `Switching context → …` | announce `Using MCP server → <nickname> · <id>` and prefer `mcp_<server>_*` tools for subsequent calls |
+| `switch dtctl to <nickname>` | as above | unchanged |
+| `use the <nickname> server` (or similar MCP-only phrasing) | unchanged | as above |
+
+Limitations the agent must be honest about:
+- The agent **cannot** programmatically change which MCP server VS Code's chat client highlights in its picker. That selection lives in the client. The agent achieves the same effect by routing all subsequent MCP calls through the named server's `mcp_<server>_*` tools and announcing the choice.
+- If one path is not configured (e.g. no matching MCP server entry, or no dtctl context), the agent reports which path failed and continues with the one that succeeded.
+- Ambiguous or fuzzy nicknames are never auto-resolved — always ask.
 
 ### Session start
 At session start the agent reports the active tenant context in one line, using whichever path(s) are configured (resolving via the registry where possible):
@@ -326,6 +340,12 @@ If the grep does not find these phrases in at least the three high-impact skills
 - Use `temp_dtctl_files/` for experiments only.
 - Update this file when new patterns or lessons emerge.
 - The memory system (`/memories/repo/`) holds AI-side notes; committed rules live here.
-- **Use clickable options for short choices.** When asking the user a question with 2–6 short fixed answers (yes/no, "do A / do B / skip", confirmations, approve/reject), use `vscode_askQuestions` with labeled options and keep `allowFreeformInput` enabled (default) so the user can still type a custom answer. Reserve plain-text questions for open-ended prompts or when each option needs a paragraph of explanation. Do **not** use clickable options for explanations, recommendations, or anything the user is meant to read rather than choose between.
+- **Clickable options for ALL choices presented to the user (mandatory).** Whenever the agent ends a turn by offering the user a choice between two or more options — *including* inline phrasings like "want me to do A or B?", "should I X, Y, or skip?", "do you want me to also …?", or any other yes/no/either-or prompt — the agent **must** call `vscode_askQuestions` with labelled options instead of asking in plain prose. Rules:
+   - Always include freeform input (`allowFreeformInput: true`, the default) so the user can type something other than the offered options. The freeform field is the implicit "other / something else" option — do not also list a separate "Other" button.
+   - 2–6 labelled options is the target range; if more would be needed, narrow the question or split it.
+   - Mark the recommended option with `recommended: true` only when there is a clear default, not by reflex.
+   - Multi-select only when the user can genuinely pick more than one (`multiSelect: true`).
+   - **Plain-text prompts are reserved for open-ended questions** (e.g. "what URL?", "what nickname?", "paste the JSON") where there is no fixed option set. Explanations, summaries, recommendations, and multi-paragraph reasoning stay in plain text — those are not choices.
+   - If unsure whether something counts as a choice: it does. Use `vscode_askQuestions`.
 
 This ensures predictable, safe, file-aware behavior for any user or AI.

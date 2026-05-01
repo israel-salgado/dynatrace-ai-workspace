@@ -18,17 +18,22 @@ This file (and its counterpart) defines **exactly** how any agent interacts with
 
 **Switch context** (preferred → nickname; fallback → raw tenant ID). The same nickname resolves both paths — single identity, two routes:
 ```
-"switch to <NICKNAME>"             # dtctl: dtctl config use-context <id>
-"use the <NICKNAME> server, …"      # MCP: select that server entry in chat
+"switch to <NICKNAME>"             # implies BOTH paths: dtctl config use-context <id> AND prefer the matching MCP server for the next call
+"switch dtctl to <NICKNAME>"        # dtctl only
+"use the <NICKNAME> server, …"      # MCP only: prefer that server entry for subsequent calls
 "switch to <TENANTID>"             # raw 8-char ID always works for dtctl
 ```
-For dtctl switches the agent always echoes a one-line confirmation (`Switching context → <NICKNAME> · <TENANTID> · <class> · <safety>`) before running `dtctl config use-context`. For MCP-only sessions no `use-context` exists — the user picks the server by name in chat. Ambiguous or fuzzy names are never auto-resolved on either path.
+When the user says **"switch to <NICKNAME>"** without qualifier, the agent attempts both paths:
+1. Resolve the nickname via the local registry (`temp_dtctl_files/tenant-memory/tenants.json`).
+2. Run `dtctl config use-context <TENANTID>` if dtctl is configured. Echo `Switching context → <NICKNAME> · <TENANTID> · <class> · <safety>` first.
+3. Announce `Using MCP server → <NICKNAME> · <TENANTID>` and prefer the matching `mcp_<server>_*` tools for subsequent calls. The agent cannot programmatically change which MCP server VS Code's chat surface highlights — that selection lives in the client — but the agent will route all MCP calls through the named server's tools.
+4. If either path is unavailable (no dtctl context, no matching MCP server entry), report which path failed and continue with whichever succeeded. Never auto-resolve ambiguous or fuzzy nicknames — always ask.
 
 **Connecting to a brand-new tenant.** Two independent procedures — dtctl (Path A) and MCP server entry (Path B). The user may want one, the other, or both. See `CONVENTIONS.md` → *Connecting to a New Tenant* for the full dual procedure (Path A: prompt for URL + safety level, run `dtctl auth login`, verify; Path B: add a parallel server entry to both `.vscode/mcp.json` and `.mcp.json`, reload MCP, verify with `get_environment_info`). Quick reference also in `CHEATSHEET.md` → *Session Management*.
 
 **Local tenant nickname registry**: when the user says *"switch to <NICKNAME>"* using a short name, resolve it via `temp_dtctl_files/tenant-memory/tenants.json` per `CONVENTIONS.md` → *Local Tenant Nickname Registry*. Never auto-resolve ambiguous or fuzzy matches — always ask. The registry is local-only and never committed.
 
-**Clickable options for short choices.** Use `vscode_askQuestions` for any short fork-in-the-road (2–6 options); leave freeform input on. Use plain text for explanations and multi-paragraph recommendations. (See `CONVENTIONS.md` → *Agent Behavior*.)
+**Clickable options for ALL user choices (mandatory, no exceptions).** Whenever the agent ends a turn by offering the user a choice — including inline phrasings like "want me to do A or B?", "should I X or skip?", "do you want me to also …?" — the agent **must** call `vscode_askQuestions` with labelled options instead of asking in plain prose. Always leave `allowFreeformInput` on (default); the freeform field is the implicit "other / type your own" option — do not also list a separate "Other" button. Plain-text prompts are reserved for open-ended questions (e.g. "what URL?", "paste the JSON") and explanations/recommendations the user is meant to read, not choose between. If unsure whether something counts as a choice: it does — use `vscode_askQuestions`. (See `CONVENTIONS.md` → *Agent Behavior*.)
 
 **Mandatory agent initialization sequence** (review files first, then run/validate):
 1. Read this file + `CLAUDE.md` + `ARCHITECTURE.md` + `CONVENTIONS.md`.
@@ -68,7 +73,7 @@ When in doubt: continuity (use what the user just used) → configured-only path
 These rules apply every turn, regardless of topic. Topic-specific rules (DQL syntax, notebook structure, etc.) live in their respective sections below.
 
 - **Echo every tenant context switch.** For dtctl switches: one-line confirmation (`Switching context → <NICKNAME> · <TENANTID> · <class> · <safety>`) before running `dtctl config use-context`. For MCP server selection in chat: echo `Using MCP server → <NICKNAME> · <TENANTID>` once before the first call. Never auto-resolve ambiguous or fuzzy nicknames — always ask.
-- **Clickable options for short choices.** Use `vscode_askQuestions` for any 2–6-option fork-in-the-road; leave freeform input on. Use plain text for explanations and multi-paragraph recommendations.
+- **Clickable options for ALL user choices (mandatory).** Whenever the agent offers the user a choice between two or more options — including inline phrasings like "want me to do A or B?" or "should I X or skip?" — use `vscode_askQuestions` with labelled options. Always leave `allowFreeformInput` on; the freeform field is the implicit "other / type your own" option (do not add a separate "Other" button). Plain text is reserved for open-ended prompts and for explanations/recommendations the user is meant to read, not choose between.
 - **File-system boundaries.** Default scope is the workspace folder. Reads outside the workspace require a stated plain-language reason first; writes outside the workspace require explicit user permission. Subagents inherit this rule. Full details in `CONVENTIONS.md` → *File-System Boundaries*.
 - **Live-state reconciliation before any modification.** Before any `dtctl apply`, MCP update, or write to a Dynatrace resource (notebook, dashboard, workflow, settings), re-export that resource's live state by ID first. Smart-merge unrelated user UI edits; stop and ask only on conflicting overwrites (options: stop / let AI overwrite / do something else). Keep a timestamped before-user-edit snapshot for revert.
 - **Always start with problems — never broad log searches.** See `## Global Rule` below for full text.
