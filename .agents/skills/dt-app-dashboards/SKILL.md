@@ -5,6 +5,20 @@ license: Apache-2.0
 ---
 
 # Dynatrace Dashboard Skill
+# Dynatrace Dashboard Skill
+
+## Workspace Guardrails (dt-mcp-server)
+
+This repo enforces a strict write-safety workflow. When creating/updating tenant resources (dashboards, notebooks, workflows, settings):
+
+1. Re-export the resource's live state by ID before any change (dtctl get / MCP export).
+2. Detect manual UI edits and never silently overwrite them:
+  - smart-merge unrelated UI edits
+  - stop and ask if the change would overwrite user edits (options: stop / let AI overwrite / do something else)
+3. Run scripts/validate-tenant-write.ps1 before any tenant write.
+4. Write tenant artifacts only under temp_dtctl_files/tenant-memory/<TENANTID>/... (one file per resource) and keep a before-change snapshot.
+
+Canonical rules live in CONVENTIONS.md and the session briefings.
 
 ## Overview
 

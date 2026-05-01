@@ -5,8 +5,20 @@ license: Apache-2.0
 ---
 
 # DQL Essentials Skill
+# DQL Essentials Skill
 
-**This file is canonical for DQL syntax, pitfalls, and patterns.** See governing briefing files (`copilot-instructions.md`/`CLAUDE.md`), `CONVENTIONS.md` (for workspace/temp rules, reconciliation, Sync Checklist), and `references/dql/*` for full agent rules. Load this skill **FIRST** before any DQL. Review all relevant workspace files (including `temp_dtctl_files/**`) first.
+## Workspace Guardrails (dt-mcp-server)
+
+This repo enforces a strict write-safety workflow. When creating/updating tenant resources (dashboards, notebooks, workflows, settings):
+
+1. Re-export the resource's live state by ID before any change (dtctl get / MCP export).
+2. Detect manual UI edits and never silently overwrite them:
+  - smart-merge unrelated UI edits
+  - stop and ask if the change would overwrite user edits (options: stop / let AI overwrite / do something else)
+3. Run scripts/validate-tenant-write.ps1 before any tenant write.
+4. Write tenant artifacts only under temp_dtctl_files/tenant-memory/<TENANTID>/... (one file per resource) and keep a before-change snapshot.
+
+Canonical rules live in CONVENTIONS.md and the session briefings.
 
 DQL is a pipeline-based query language. Queries chain commands with `|` to filter, transform, and aggregate data. DQL has unique syntax that differs from SQL — load this skill before writing any DQL query.
 
@@ -71,21 +83,6 @@ ______________________________________________________________________
 | `substring(field, 0, 200)`                    | `substring(field, from: 0, to: 200)` | DQL functions use **named parameters** — positional args cause `TOO_MANY_POSITIONAL_PARAMETERS` |
 | `filter log.level == "ERROR"`                 | `filter loglevel == "ERROR"`        | Log severity field is `loglevel` (no dot) — `log.level` does not exist                          |
 | `sort count() desc`                           | ``sort `count()` desc``              | fields with special characters must use backticks                |
-| `summarize {x = max(ts)} by {f}` in **dashboard tile** | `fieldsAdd bin = bin(ts, 3h) | sort bin asc | fields bin, f, x` or simple `fields ... | limit` | Dashboard tiles have stricter parser than standalone `dtctl query` or MCP `execute_dql`; `by {}` record syntax often triggers "'by' isnt allowed here". Test in **live tile**; prefer `fieldsAdd`+`bin`+`sort`+`fields` for trends/charts. Use `makeTimeseries` as alternative for time-based aggregation. |
-
-______________________________________________________________________
-
-## Dashboard vs Notebook vs Standalone DQL (Agent-Agnostic Rule)
-
-**MANDATORY for ALL agents**: Load this skill **FIRST** before any DQL. Review all relevant workspace files first (the active tenant's folder under `temp_dtctl_files/tenant-memory/<TENANTID>/` and any per-type subfolder relevant to the task, skills, `memories/repo/*`). Use `temp_dtctl_files/` only for tenant-specific experiments — it is the agent's tenant workspace for both dtctl and MCP-fetched content (ignored on commit); keep root source generic/standardized for any user.
-
-- **Dashboard tiles**: Strictest parser. Avoid complex `summarize {..} by {..}`; use `fields`/`fieldsAdd bin()`/`sort`/`limit` + let visualization aggregate. Always validate by applying + refreshing UI. No time filters (UI timeframe handles it).
-- **Notebooks**: Prefer full JSON with `type: dql`, explicit `state.input.value/timeframe/querySettings/visualizationSettings`. Verify non-empty `state.input.value` post-`dtctl apply`. Use unique `event.type` + `event.provider` for workflow isolation to prevent data mixing.
-- **Standalone (`dtctl query`, MCP)**: More forgiving; can use full `summarize {..} by {..}` or `makeTimeseries`.
-- **Common success pattern** (business events from custom workflows): `fetch bizevents | filter event.type == "..." | filter event.provider == "..." | filter isNotNull(...) | fieldsAdd bin = bin(timestamp, Xh) | sort ... | fields ... | limit N`. Use `timestamp` (not legacy fields); `bizevents` (not `business event`).
-- **Validation workflow**: Test EVERY query in the *exact target context* (standalone `dtctl query`/MCP `execute_dql` **AND** live dashboard tile/notebook). Re-export/verify after apply. Start all investigations with problems (never broad log searches). Record **generic** lessons only in `/memories/repo/`.
-
-This ensures **identical safe behavior** across agents (speed may vary) without embedding tenant-specific artifacts.
 
 ______________________________________________________________________
 
@@ -338,44 +335,6 @@ ______________________________________________________________________
     - ✅ Use [time functions](references/dql/dql-functions-time.md). They support calendar and time zones properly including DST.
     - ❌ Avoid using `formatTimestamp` for extracting time components.
     - ❌ Avoid converting timestamps and durations to double/long and using division, modulo, and constants expressing time units as nanoseconds.
-
-______________________________________________________________________
-
-## Advanced Execution: Budget, Polling & Metadata
-
-**Always start with problems.** Use `dt.davis.problems` or `list_problems` before broad DQL.
-
-### Grail Budget & Cost Control
-- Pre-check budget before heavy queries.
-- Monitor `metadata.grail.scannedBytes` (bytes billed).
-- Use `reset_grail_budget` tool when limit is reached.
-- Prefer `fields`, `bin()`, `limit`, and tight timeframes over broad `summarize`.
-
-### Polling for Long-Running Queries
-- Some queries return immediately; others require polling (`requestToken` + 2s intervals).
-- Always inspect response state (`RUNNING`, result presence).
-
-### Rich Result Metadata
-Capture and log:
-- `scannedBytes`, `scannedRecords`
-- `executionTimeMilliseconds`
-- `queryId`
-- `sampled` flag
-- Budget state and warnings
-
-### Verify DQL First
-Use `verify_dql` (or equivalent) before `execute_dql` in production flows.
-
-**Best Practice Pattern:**
-```dql
-// Tight, problem-focused query example
-fetch dt.davis.problems, from:now()-2h
-| filter status == "ACTIVE"
-| fields timestamp, problem_id = id, title = title, severity = impact_level
-| limit 20
-```
-
-Use `maxResultRecords` / `maxResultBytes` parameters to control output size.
 
 ______________________________________________________________________
 

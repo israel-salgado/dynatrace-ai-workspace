@@ -5,6 +5,20 @@ license: Apache-2.0
 ---
 
 # Dynatrace Notebook Skill
+# Dynatrace Notebook Skill
+
+## Workspace Guardrails (dt-mcp-server)
+
+This repo enforces a strict write-safety workflow. When creating/updating tenant resources (dashboards, notebooks, workflows, settings):
+
+1. Re-export the resource's live state by ID before any change (dtctl get / MCP export).
+2. Detect manual UI edits and never silently overwrite them:
+  - smart-merge unrelated UI edits
+  - stop and ask if the change would overwrite user edits (options: stop / let AI overwrite / do something else)
+3. Run scripts/validate-tenant-write.ps1 before any tenant write.
+4. Write tenant artifacts only under temp_dtctl_files/tenant-memory/<TENANTID>/... (one file per resource) and keep a before-change snapshot.
+
+Canonical rules live in CONVENTIONS.md and the session briefings.
 
 ## Overview
 
@@ -98,33 +112,10 @@ This skill uses **progressive disclosure** - load only what you need:
 - **Analyzing notebooks** → Load `references/analyzing.md` for structure analysis, JSON extraction, and query execution
 
 **⚠️ MANDATORY for creation/modification:**
-0. **Live State Reconciliation & Conflict Protection**: Before any change or apply, re-export live state from tenant (`dtctl get` or MCP), update local reference, run `scripts/validate-tenant-write.ps1`, and check for manual user edits. Stop and ask for explicit permission on any conflict. Never silently overwrite user work.
 1. Always load the relevant reference file first
 2. Load relevant skills for query generation (MANDATORY - do not invent queries)
 3. Test and validate all DQL queries before adding to notebook (see create-update.md)
 4. Validate notebook JSON against schema before save/upload (see Schema Validation below)
-
-### Minimal DQL Section Template (v7)
-
-```json
-{
-  "id": "uuid-or-stable-id",
-  "type": "dql",
-  "showTitle": true,
-  "title": "Query Title",
-  "state": {
-    "input": {
-      "value": "fetch dt.davis.problems | limit 10",
-      "timeframe": "now()-2h"
-    },
-    "querySettings": {},
-    "visualization": "table",
-    "visualizationSettings": {}
-  }
-}
-```
-
-Use this exact structure for new DQL sections. Prefer stable IDs when updating existing notebooks.
 
 ---
 

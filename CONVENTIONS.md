@@ -253,6 +253,74 @@ After any change to governing files, this file, memory, or SKILL.md:
 - Update `ARCHITECTURE.md`, `CHEATSHEET.md`, relevant skills, and run `scripts/validate-tenant-write.ps1`.
 - Verify no tenant-specific references in root via grep.
 
+### Skills update redundancy (after `npx skills add ...`)
+
+The upstream skills installer overwrites `.agents/skills/**` with upstream content.
+This is expected and desirable, but it can remove **redundant repo-specific guardrail reminders** that were previously embedded inside skill files.
+
+This repo's *true* enforcement lives in the governing briefings (`.github/copilot-instructions.md`, `CLAUDE.md`) + this file.
+However, we intentionally keep a small amount of **redundant “workspace guardrails”** inside selected skills so that:
+- agents that only load skills still get the critical safety workflow, and
+- a future upstream skill change does not silently degrade safety behavior.
+
+#### 1) Run updates safely
+- Always run skill updates on a feature branch.
+- Run the updater (example):
+  - `npx skills add dynatrace/dynatrace-for-ai`
+  - `npx skills add dynatrace-oss/dtctl`
+
+#### 2) Inspect what changed
+- Confirm the change set:
+  - `git diff --name-only`
+  - `git diff --stat`
+- Expect changes mainly under `.agents/skills/**` and `skills-lock.json`.
+
+#### 3) Detect redundancy loss (guardrails removed from skills)
+Specifically look for removal of any of these concepts from the skill layer:
+- `scripts/validate-tenant-write.ps1` required before tenant writes
+- `temp_dtctl_files/tenant-memory/<TENANTID>/...` per-tenant file contract
+- Live State Reconciliation & Conflict Protection (re-export live state by ID first)
+- Conflict behavior: smart-merge unrelated UI edits; stop and ask on overwrites (stop / let AI overwrite / do something else)
+
+Practical detection:
+- `git diff` the high-impact skills:
+  - `.agents/skills/dt-app-notebooks/SKILL.md`
+  - `.agents/skills/dt-app-dashboards/SKILL.md`
+  - `.agents/skills/dt-dql-essentials/SKILL.md`
+
+#### 4) Re-introduce a minimal “Workspace Guardrails” block into selected skills
+
+If upstream removed or weakened the reminders above, re-add the redundancy by inserting this exact block into the top of the selected skill files (keep it short to minimize merge conflicts):
+
+```
+## Workspace Guardrails (dt-mcp-server)
+
+This repo enforces a strict write-safety workflow. When creating/updating tenant resources (dashboards, notebooks, workflows, settings):
+
+1. Re-export the resource's live state by ID before any change (dtctl get / MCP export).
+2. Detect manual UI edits and never silently overwrite them:
+   - smart-merge unrelated UI edits
+   - stop and ask if the change would overwrite user edits (options: stop / let AI overwrite / do something else)
+3. Run scripts/validate-tenant-write.ps1 before any tenant write.
+4. Write tenant artifacts only under temp_dtctl_files/tenant-memory/<TENANTID>/... (one file per resource) and keep a before-change snapshot.
+
+Canonical rules live in CONVENTIONS.md and the session briefings.
+```
+
+Rules for this block:
+- Do not include any real tenant IDs/URLs or tenant names other than the public baseline.
+- Keep the block wording stable over time (only update if the workflow changes).
+- Prefer placing it near the top of the skill under a clear heading so it is seen early.
+
+#### 5) Verify redundancy is present (post-fix)
+
+After re-adding the guardrails block, verify the skill layer still contains the key reminders with a quick grep, for example:
+- `scripts/validate-tenant-write.ps1`
+- `temp_dtctl_files/tenant-memory/`
+- `stop / let AI overwrite / do something else`
+
+If the grep does not find these phrases in at least the three high-impact skills listed above, treat it as a regression and restore the guardrail block.
+
 ## Agent Behavior
 - Review files first (minimal corrections).
 - Use `temp_dtctl_files/` for experiments only.

@@ -6,7 +6,6 @@
 
 ## General rules
 * `makeTimeseries` accepts timeframe from `from:` and `to:` or from `timeframe:` parameters, but if they are not present timeframe is inherited from query providing data. In case time values from expression/field provided in `time:` parameter is outside from this inherited timeframe, data will be ignored. For such cases providing proper timeframe is necessary.      
-* **Dashboard tiles**: `summarize {..} by {..}` record syntax frequently fails with "'by' isnt allowed here". See main SKILL.md "Dashboard vs Notebook vs Standalone DQL" section. Prefer `fieldsAdd bin(...) | sort | fields` patterns for charts; test in live tile. Cross-reference dt-dql-essentials pitfalls and pollen workflow examples.
 
 ## Examples
 

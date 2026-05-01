@@ -2,7 +2,22 @@
 
 ## Installation
 
-Install and upgrade instructions live in the dtctl repo: **[github.com/dynatrace-oss/dtctl](https://github.com/dynatrace-oss/dtctl)** (Homebrew, install script, or `go install`). After installing, verify with `dtctl version` and confirm it is on your `PATH`.
+Install from https://github.com/dynatrace-oss/dtctl. Verify with `dtctl version`.
+
+```bash
+ARCH=$(uname -m | sed 's/x86_64/amd64/; s/arm64/arm64/')
+OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+TAG=$(curl -s -I -L https://github.com/dynatrace-oss/dtctl/releases/latest | tr -d '\r' | awk -F/ '/^location: /{print $NF}' | tail -n1)
+TARBALL="dtctl_${TAG#v}_${OS}_${ARCH}.tar.gz"
+URL="https://github.com/dynatrace-oss/dtctl/releases/download/${TAG}/${TARBALL}"
+mkdir -p /tmp/dtctl && cd /tmp/dtctl
+curl -L "$URL" -o "$TARBALL"
+tar -xzf "$TARBALL"
+sudo mv dtctl /usr/local/bin/
+dtctl version
+```
+
+If no sudo: place in `~/bin/` and ensure it's on PATH.
 
 ## Initial Setup
 

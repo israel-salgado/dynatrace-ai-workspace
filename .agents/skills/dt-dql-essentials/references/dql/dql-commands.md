@@ -218,8 +218,6 @@ Groups together records that have the same values for a given field and aggregat
   `expression*` (any) — An expression to group by.  [assign:optional]
   `aggregation*` (any) — An aggregation function (min, max, avg, ...).  [assign:optional]
 
-**Dashboard-specific note**: In **dashboard tiles**, the `by: {..}` record syntax in `summarize` frequently triggers "'by' isnt allowed here". Prefer `fieldsAdd bin(timestamp, Xh) | sort | fields ...` (or `makeTimeseries`) and let the visualization handle aggregation. See main `SKILL.md` "Dashboard vs Notebook vs Standalone DQL" section and repo memory for agent-agnostic validation rules (test in live tile, use unique `event.type` + provider for isolation, always load this skill first). Full examples in `references/summarization.md`.
-
 ## `timeseries`
 Reads metrics in the time series format from the data source.
 `timeseries [bucket: name, …] [, from] [, to] [, timeframe] [, by: { [expression, …] }] [, filter] [, interval] [, bins] [, shift] [, nonempty] [, union ,] metric, …`
