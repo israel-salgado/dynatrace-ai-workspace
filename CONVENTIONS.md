@@ -130,6 +130,8 @@ When the user asks to connect to / switch to a new Dynatrace tenant ID (e.g. `ab
 
 MCP reaches a tenant via a named server entry in **both** `.vscode/mcp.json` and `.mcp.json` (kept in sync). This path is independent of dtctl — you can configure MCP without ever installing dtctl.
 
+**Hard rule:** private tenant IDs/URLs must never be committed to this repo. The only committed tenant routing is the public baseline (`demo.live` → `guu84124`). Any additional MCP server entries are **local-only per machine**.
+
 1. Ask the user for a **nickname** (free text, lowercased; the chat invocation will be *"use the `<nickname>` server, …"*) and the **environment URL** (same three URL options as Path A).
 2. Add a parallel server entry under the top-level `"servers"` key in `.vscode/mcp.json`:
    ```jsonc
@@ -150,7 +152,8 @@ MCP reaches a tenant via a named server entry in **both** `.vscode/mcp.json` and
 
 ### Both paths
 
-- Do **not** add tenant-specific IDs to root source files **other than** the two `mcp.json` files. Per-tenant artifacts go in `temp_dtctl_files/tenant-memory/<TENANTID>/`.
+- Do **not** add tenant-specific IDs/URLs to any repo-tracked source files (markdown, scripts, settings, configs). Per-tenant artifacts go in `temp_dtctl_files/tenant-memory/<TENANTID>/`.
+- If the user chooses MCP Path B, the MCP config files may contain tenant URLs **locally**, but those changes must be kept out of commits (verify with `git status` before any push/PR).
 - After a successful connect via either path, **offer to record a nickname** for the tenant in the Local Tenant Nickname Registry (next section). The same nickname works for both `"switch to <nickname>"` (dtctl) and *"use the `<nickname>` server"* (MCP) — that's the intended single-identity pattern.
 
 ## Local Tenant Nickname Registry
@@ -231,7 +234,10 @@ The agent does **not** auto-switch. If an active context is unknown to the regis
 - **Hand edits**: honor them. The agent must treat user edits as truth and not silently rewrite.
 - **Removal**: confirm before removing. Offer to also `dtctl auth logout --context <id>` if the user is decommissioning entirely.
 - **First run on a fresh clone**: the file does not exist. Auto-create `temp_dtctl_files/tenant-memory/` and an empty `tenants.json` (`{ "schema": 1, "tenants": [] }`) before adding the first nickname. Suggest the public baseline tenant `guu84124` (`demo.live.dynatrace.com`) as a safe first connection — the user may nickname it `demo.live` (matching its public URL) or anything else.
-- **MCP exception**: `.mcp.json` and `.vscode/mcp.json` are the **only allowed locations** in the repo where tenant IDs may appear, because VS Code and the MCP launcher read them as real files. The nickname registry does not replace them; users who want the AI to reach a tenant via MCP must add a server entry in both files (see *Connecting to a New Tenant* → Path B above and `ARCHITECTURE.md` → *MCP Server*).
+- **MCP config safety**: `.vscode/mcp.json` and `.mcp.json` are repo-tracked files. In this repo they should remain baseline-only (public `demo.live` plus placeholders). If the user adds private tenant routings, treat those edits as **local-only** and ensure they are never committed. Recommended local protection:
+  ```
+  git update-index --skip-worktree .vscode/mcp.json .mcp.json
+  ```
 
 ## DQL Rules (All Agents)
 - Use unique `event.type` + `event.provider` for workflow isolation.

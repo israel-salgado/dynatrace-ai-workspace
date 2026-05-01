@@ -193,6 +193,14 @@ The AI can reach Dynatrace **two independent ways**. Both can do most of the sam
 
 ### 4. Configure additional tenants for MCP (optional)
 
+> **Important (private tenants):** `.vscode/mcp.json` and `.mcp.json` are repo-tracked files. If you add your own tenant routing, do it **locally** and do **not** commit/push those changes.
+>
+> Recommended local protection (prevents accidental staging in most workflows):
+>
+> ```bash
+> git update-index --skip-worktree .vscode/mcp.json .mcp.json
+> ```
+
 > **Just want to query the public demo tenant?** Skip this entire section and go to Step 5 — the workspace already works against `demo.live` out of the box.
 >
 > **Want the AI to talk to your own Dynatrace tenant via MCP?** Keep going. (For the full capability comparison between MCP and `dtctl`, see the table just above.)
@@ -201,7 +209,7 @@ The workspace is pre-configured with two MCP server entries: the shared
 demo tenant (`demo.live` → `guu84124`, public) and a `NICKNAME`
 placeholder you can rename to your own tenant.
 
-Complete sub-steps **4.A–4.C** to add your tenant. Step **4.D** is optional cosmetic polish — skip it if you don't care about the AI's session-start banner mentioning your tenant by name.
+Complete sub-steps **4.A–4.C** to add your tenant. Step **4.D** documents the recommended safety rule to keep private tenant details local and out of commits.
 
 #### Tenant Configuration Checklist
 
@@ -246,7 +254,7 @@ You'll edit two things in the JSON below: `NICKNAME` and `TENANTID`.
 
 **Step 4.B — Mirror the change to `.mcp.json`**
 
-This workspace ships **two** MCP config files that must stay in sync:
+This workspace ships **two** MCP config files that must stay in sync (in your local working copy):
 
 | File | Read by |
 |---|---|

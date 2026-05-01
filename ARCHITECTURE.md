@@ -107,7 +107,17 @@ demo.live   →  https://guu84124.apps.dynatrace.com               (production, 
 <NICKNAME>  →  https://<TENANTID>.<class>.dynatrace[labs].com    (added per machine, not committed)
 ```
 
-Only the public baseline routing (`guu84124`) is committed to the repo. Additional **tenant routings** can be added by hand to `.mcp.json` if you want Copilot to reach another tenant by name. `.mcp.json` is the **one allowed location** in the repo where tenant IDs may appear (because VS Code reads it as a real file); per-tenant artifacts and the local nickname registry live under `temp_dtctl_files/` and never get pushed.
+Only the public baseline routing (`guu84124`) is committed to the repo.
+
+- Additional tenant routings (private tenant IDs/URLs) must be configured **locally per machine** in your working copy of `.vscode/mcp.json` and `.mcp.json`.
+- **Never commit** those private routings to Git.
+- The canonical place to record tenant metadata (nickname, id, url, class, safety) is the local-only registry at `temp_dtctl_files/tenant-memory/tenants.json`.
+
+If you edit `.vscode/mcp.json` / `.mcp.json` locally, consider protecting yourself from accidental staging with:
+
+```bash
+git update-index --skip-worktree .vscode/mcp.json .mcp.json
+```
 
 Authentication uses OAuth browser SSO — no API tokens or credentials are stored in the workspace. To target a specific environment in a Copilot session:
 

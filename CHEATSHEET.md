@@ -208,7 +208,12 @@ dtctl config current-context; dtctl auth whoami --plain         # verify
 ```
 URL classes: `apps` (prod), `sprint.apps` (sprint/lab — Dynatrace internal only), `live` (classic Gen2).
 
-*Path B — via MCP server entry:* add a parallel `"<nickname>": { … "DT_ENVIRONMENT": "https://<TENANTID>.apps.dynatrace.com" … }` block to **both** `.vscode/mcp.json` (under `"servers"`) and `.mcp.json` (under `"mcpServers"`), reload MCP servers (VS Code: *MCP: Reload Servers*), then verify with `get_environment_info`.
+*Path B — via MCP server entry:* add a parallel `"<nickname>": { … "DT_ENVIRONMENT": "https://<TENANTID>.apps.dynatrace.com" … }` block to **both** `.vscode/mcp.json` (under `"servers"`) and `.mcp.json` (under `"mcpServers"`) **in your local working copy only** (do not commit). Reload MCP servers (VS Code: *MCP: Reload Servers*), then verify with `get_environment_info`.
+
+Local protection (recommended):
+```
+git update-index --skip-worktree .vscode/mcp.json .mcp.json
+```
 
 **Switch context** (preferred → nickname; fallback → raw tenant ID). The same nickname resolves both paths — single identity, two routes:
 ```
